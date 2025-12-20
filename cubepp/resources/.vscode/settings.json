@@ -1,0 +1,11 @@
+{
+  "C_Cpp.default.cppStandard": "c++20",
+  "C_Cpp.formatting": "clangFormat",
+  "C_Cpp.clang_format_path": "${workspaceFolder}/scripts/clang-format",
+  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "cmake.buildDirectory": "${workspaceFolder}/.build",
+  "C_Cpp.default.defines": [
+    "{{STM32TYPE}}",
+    "USE_HAL_DRIVER"
+  ],
+}

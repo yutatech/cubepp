@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+
+print_help() {
+  echo "Usage: $0 [options]"
+  echo "Options:"
+  echo "  -c              Clean build directory and rebuild"
+  echo "  -r              Build in release mode"
+  echo "  -h              Show this help message"
+}
+
+# script options
+OPTION_NAMES=("DEBUG")
+DEBUG=ON
+
+CLEAN=OFF
+
+while getopts "crshv:" opt; do
+  case "$opt" in
+  c)
+    echo "Clean build directory and rebuild"
+    CLEAN=ON
+    ;;
+  r)
+    echo "Building in release mode"
+    DEBUG=OFF
+    ;;
+  h)
+    print_help
+    exit 0
+    ;;
+  *)
+    echo "Invalid option" >&2
+    print_help
+    exit 1
+    ;;
+  esac
+done
+
+# construct CMake Definitions and check if configuration has changed
+CMAKE_DEFINES=""
+CMAKE_CONFIG_CHANGED=0
+
+CMAKE_CHACHE_FILE="$PROJECT_DIR/.build/CMakeCache.txt"
+
+if [ "$CLEAN" == "ON" ]; then
+  rm -rf "$PROJECT_DIR/.build"
+fi
+
+
+for OPTION in "${OPTION_NAMES[@]}"; do
+  TARGET_VALUE=${!OPTION}
+  if [ -f "$CMAKE_CHACHE_FILE" ]; then
+      CURRENT_VALUE=$(grep "^${OPTION}:" "$CMAKE_CHACHE_FILE" | cut -d= -f2)
+      # compare current value with target value
+      if [ "$CURRENT_VALUE" != "$TARGET_VALUE" ]; then
+        CMAKE_CONFIG_CHANGED=1
+      fi
+  fi
+  CMAKE_DEFINES+=" -D$OPTION=$TARGET_VALUE"
+done
+
+if [ $CMAKE_CONFIG_CHANGED -eq 1 ]; then
+  echo "CMake configuration changed, reconfiguring..."
+  rm -rf "$PROJECT_DIR/.build"
+fi
+
+if [ ! -d "$PROJECT_DIR/.build" ]; then
+  cmake -S . \
+        -G Ninja \
+        -B $PROJECT_DIR/.build \
+        -DCMAKE_C_FLAGS=""
+fi
+
+cmake --build $PROJECT_DIR/.build --parallel

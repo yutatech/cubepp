@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# install and version check
+CLANG_FORMAT_SPECIFIED_VERSION=14
+CLANG_FORMAT_COMMAND=""
+if command -v clang-format-$CLANG_FORMAT_SPECIFIED_VERSION &>/dev/null; then
+  CLANG_FORMAT_COMMAND=clang-format-$CLANG_FORMAT_SPECIFIED_VERSION
+elif [[ $(clang-format --version | perl -nle 'print $& if /\d+/') -eq $CLANG_FORMAT_SPECIFIED_VERSION ]]; then
+  CLANG_FORMAT_COMMAND=clang-format
+else
+  echo "clang-format version $CLANG_FORMAT_SPECIFIED_VERSION is not installed. Skip formatting cpp." >&2
+  exit 0
+fi
+
+${CLANG_FORMAT_COMMAND} "$@"
+
+if [ $? -ne 0 ]; then
+  echo "clang-format failed." >&2
+  exit 1
+fi

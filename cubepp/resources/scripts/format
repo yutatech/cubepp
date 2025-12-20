@@ -1,0 +1,8 @@
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "Formatting cpp files"
+CPP_FILES=$(find "$SCRIPT_DIR/Application" -name "*.cpp" -o -name "*.h")
+
+$SCRIPT_DIR/clang-format -i $CPP_FILES
+echo "Completed formatting"
