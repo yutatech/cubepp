@@ -16,3 +16,7 @@ cubepp = "cubepp.main:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["cubepp*"]
+
+[tool.setuptools.package-data]
+cubepp = ["resources/*", "resources/**/*"]

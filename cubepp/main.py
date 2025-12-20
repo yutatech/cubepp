@@ -43,6 +43,8 @@ CONFIG = {
             '"__packed=__attribute__((__packed__))"',
         ],
         "target_compile_options": [
+            "-Wall",
+            "-Wextra",
             "-fdiagnostics-color=always"
         ],
         "target_link_libraries": [
@@ -52,12 +54,16 @@ CONFIG = {
             "--specs=nosys.specs",
             "-Wl,-u,_printf_float"
         ],
-        "set_source_files_properties": [
-            "Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS/cmsis_os.c",
-            "Core/Src/syscalls.c",
-            "PROPERTIES COMPILE_OPTIONS \"-w\" # Suppress all warnings for these files"
-        ],
     },
+    "extra" :
+            """
+file(GLOB_RECURSE STM32_SOURCES
+    Drivers/**
+)
+foreach(f ${STM32_SOURCES})
+    set_source_files_properties(${f} PROPERTIES COMPILE_OPTIONS "-w")
+endforeach()
+            """,
     
     "profiles": {
         "armmath" : {
@@ -246,6 +252,27 @@ target_sources(${{CMAKE_PROJECT_NAME}} PRIVATE
                 content = content.rstrip() + '\n' + new_func + '\n'
         
         return content
+    
+    def update_cmake_extra(self, config: dict[str, any]):
+        """CMakeLists.txt に extra セクションを追加"""
+        cmake_file = self.root_dir / "CMakeLists.txt"
+        
+        with open(cmake_file, 'r') as f:
+            content = f.read()
+        
+        extra = config.get("extra", "").strip()
+        if extra:
+            # 既存の extra セクションを削除
+            pattern = r'# Extra CMake configurations[\s\S]*?(?=\n#|$)'
+            content = re.sub(pattern, '', content, flags=re.DOTALL).rstrip()
+            
+            # 末尾に追加
+            content += f'\n\n# Extra CMake configurations\n{extra}\n'
+        
+        with open(cmake_file, 'w') as f:
+            f.write(content)
+        
+        print(f"✓ Updated extra section in {cmake_file.name}")
 
     def copy_resources(self, config: dict[str, any]) -> set:
         """resources 配下のファイルを実行ディレクトリへ展開し、コピーされたファイルのセットを返す"""
@@ -258,7 +285,7 @@ target_sources(${{CMAKE_PROJECT_NAME}} PRIVATE
             return copied_files
 
         dest_root = Path.cwd()
-        script_dir = self.root_dir
+        script_dir = Path(__file__).resolve().parent
         copied_any = False
 
         for raw_path in paths:
@@ -434,8 +461,8 @@ target_sources(${{CMAKE_PROJECT_NAME}} PRIVATE
         """すべての更新を実行"""
         print("Starting project setup...\n")
         
-        self.update_cmake_presets(config=CONFIG)
         self.update_cmake_lists(config=CONFIG)
+        self.update_cmake_extra(config=CONFIG)
         for profile in profiles:
             profile_cfg = CONFIG.get("profiles", {}).get(profile, {})
             if not profile_cfg:
@@ -443,7 +470,9 @@ target_sources(${{CMAKE_PROJECT_NAME}} PRIVATE
                 continue
             print(f"\nApplying profile: {profile}")
             # プロファイルごとに CMakeLists.txt を更新
+            self.update_cmake_presets(config={**CONFIG, **profile_cfg})
             self.update_cmake_lists(config={**CONFIG, **profile_cfg})
+            self.update_cmake_extra(config={**CONFIG, **profile_cfg})
         copied_files = self.copy_resources(config=CONFIG)
         # resources を実行ディレクトリへ展開した後、projectname の置換等を行う（コピーされたファイルのみ）
         self.post_process_projectname(Path.cwd(), copied_files)
