@@ -397,7 +397,7 @@ target_sources(${{CMAKE_PROJECT_NAME}} PRIVATE
                 f.write_text(text, encoding='utf-8')
                 print(f"✓ Replaced placeholders in {f}")
 
-        # 3) Core/Src/main.c に include を追加
+        # 3) Core/Src/main.c に include / Setup / Loop を追加
         main_c = dest_root / 'Core' / 'Src' / 'main.c'
         if main_c.exists():
             try:
@@ -405,16 +405,38 @@ target_sources(${{CMAKE_PROJECT_NAME}} PRIVATE
             except Exception:
                 src = ''
 
+            new_src = src
+            changed = False
+
+            # 3a) include の挿入
             include_line = f'#include "{project_name}/main_exec.h"\n'
-            marker = '/* USER CODE BEGIN Includes */'
-            if marker in src and include_line.strip() not in src:
-                parts = src.split(marker)
-                # insert include immediately after marker
-                new_src = parts[0] + marker + '\n' + include_line + parts[1]
+            marker_inc = '/* USER CODE BEGIN Includes */'
+            if marker_inc in new_src and include_line.strip() not in new_src:
+                parts = new_src.split(marker_inc, 1)
+                new_src = parts[0] + marker_inc + '\n' + include_line + parts[1]
+                changed = True
+
+            # 3b) Setup(); を挿入（/* USER CODE BEGIN 2 */ の直後）
+            marker2 = '/* USER CODE BEGIN 2 */'
+            setup_call = '  Setup();\n'
+            if marker2 in new_src and 'Setup();' not in new_src:
+                parts = new_src.split(marker2, 1)
+                new_src = parts[0] + marker2 + '\n' + setup_call + parts[1]
+                changed = True
+
+            # 3c) Loop(); を挿入（/* USER CODE BEGIN 3 */ の直後）
+            marker3 = '/* USER CODE BEGIN 3 */'
+            loop_call = '  Loop();\n'
+            if marker3 in new_src and 'Loop();' not in new_src:
+                parts = new_src.split(marker3, 1)
+                new_src = parts[0] + marker3 + '\n' + loop_call + parts[1]
+                changed = True
+
+            if changed:
                 main_c.write_text(new_src, encoding='utf-8')
-                print(f"✓ Inserted include into {main_c}")
+                print(f"✓ Modified {main_c}")
         else:
-            print(f"! {main_c} not found; skipped include insertion")
+            print(f"! {main_c} not found; skipped insertion into main.c")
 
     def _copy_tree(self, src: Path, dest_root: Path) -> set:
         """src 配下のファイルを dest_root へ相対パスを保ってコピーし、コピーされたファイルのセットを返す"""
