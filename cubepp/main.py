@@ -103,7 +103,35 @@ endforeach()
         "paths": [
             "resources"
         ],
-    }
+    },
+    
+    # Core/Src/main.c への自動挿入設定
+    "main_c_injections": [
+        {
+            "marker": "/* USER CODE BEGIN Includes */",
+            "content": '#include "{project_name}/main_exec.h"',
+            "check": "main_exec.h",  # 既存チェック用の文字列
+        },
+        {
+            "marker": "/* USER CODE BEGIN 2 */",
+            "content": "  Setup();",
+            "check": "Setup();",
+        },
+        {
+            "marker": "/* USER CODE BEGIN 3 */",
+            "content": "  Loop();",
+            "check": "Loop();",
+        },
+        {
+            "marker": "/* USER CODE BEGIN 0 */",
+            "content": """int _write(int file, char *ptr, int len)
+{
+  HAL_UART_Transmit(&huart, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+  return len;
+}""",
+            "check": "_write",
+        },
+    ]
 }
 
 
@@ -397,46 +425,50 @@ target_sources(${{CMAKE_PROJECT_NAME}} PRIVATE
                 f.write_text(text, encoding='utf-8')
                 print(f"✓ Replaced placeholders in {f}")
 
-        # 3) Core/Src/main.c に include / Setup / Loop を追加
+        # 3) Core/Src/main.c への自動挿入処理
+        self._inject_to_main_c(dest_root, project_name)
+
+    def _inject_to_main_c(self, dest_root: Path, project_name: str):
+        """Core/Src/main.c にCONFIGで定義された内容を挿入"""
         main_c = dest_root / 'Core' / 'Src' / 'main.c'
-        if main_c.exists():
-            try:
-                src = main_c.read_text(encoding='utf-8')
-            except Exception:
-                src = ''
-
-            new_src = src
-            changed = False
-
-            # 3a) include の挿入
-            include_line = f'#include "{project_name}/main_exec.h"\n'
-            marker_inc = '/* USER CODE BEGIN Includes */'
-            if marker_inc in new_src and include_line.strip() not in new_src:
-                parts = new_src.split(marker_inc, 1)
-                new_src = parts[0] + marker_inc + '\n' + include_line + parts[1]
-                changed = True
-
-            # 3b) Setup(); を挿入（/* USER CODE BEGIN 2 */ の直後）
-            marker2 = '/* USER CODE BEGIN 2 */'
-            setup_call = '  Setup();\n'
-            if marker2 in new_src and 'Setup();' not in new_src:
-                parts = new_src.split(marker2, 1)
-                new_src = parts[0] + marker2 + '\n' + setup_call + parts[1]
-                changed = True
-
-            # 3c) Loop(); を挿入（/* USER CODE BEGIN 3 */ の直後）
-            marker3 = '/* USER CODE BEGIN 3 */'
-            loop_call = '  Loop();\n'
-            if marker3 in new_src and 'Loop();' not in new_src:
-                parts = new_src.split(marker3, 1)
-                new_src = parts[0] + marker3 + '\n' + loop_call + parts[1]
-                changed = True
-
-            if changed:
-                main_c.write_text(new_src, encoding='utf-8')
-                print(f"✓ Modified {main_c}")
-        else:
+        if not main_c.exists():
             print(f"! {main_c} not found; skipped insertion into main.c")
+            return
+
+        try:
+            src = main_c.read_text(encoding='utf-8')
+        except Exception:
+            src = ''
+
+        new_src = src
+        changed = False
+
+        # CONFIGから挿入設定を取得
+        injections = CONFIG.get("main_c_injections", [])
+        
+        for injection in injections:
+            marker = injection.get("marker")
+            content_template = injection.get("content")
+            check = injection.get("check")
+            
+            if not marker or not content_template:
+                continue
+            
+            # プロジェクト名の置換が必要な場合のみ format() を使用
+            if "{project_name}" in content_template:
+                content = content_template.format(project_name=project_name)
+            else:
+                content = content_template
+            
+            # マーカーが存在し、チェック文字列が含まれていない場合に挿入
+            if marker in new_src and check not in new_src:
+                parts = new_src.split(marker, 1)
+                new_src = parts[0] + marker + '\n' + content + '\n' + parts[1]
+                changed = True
+
+        if changed:
+            main_c.write_text(new_src, encoding='utf-8')
+            print(f"✓ Modified {main_c}")
 
     def _copy_tree(self, src: Path, dest_root: Path) -> set:
         """src 配下のファイルを dest_root へ相対パスを保ってコピーし、コピーされたファイルのセットを返す"""
