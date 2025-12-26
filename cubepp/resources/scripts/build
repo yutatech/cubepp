@@ -12,9 +12,10 @@ print_help() {
 }
 
 # script options
-OPTION_NAMES=("DEBUG")
-DEBUG=ON
+CMAKE_OPTIONS=("CMAKE_BUILD_TYPE")
+BUILD_OPTIONS=()
 
+CMAKE_BUILD_TYPE="Debug"
 CLEAN=OFF
 
 while getopts "crshv:" opt; do
@@ -25,7 +26,7 @@ while getopts "crshv:" opt; do
     ;;
   r)
     echo "Building in release mode"
-    DEBUG=OFF
+    CMAKE_BUILD_TYPE="Release"
     ;;
   h)
     print_help
@@ -41,6 +42,7 @@ done
 
 # construct CMake Definitions and check if configuration has changed
 CMAKE_DEFINES=""
+BUILD_DEFINES=""
 CMAKE_CONFIG_CHANGED=0
 
 CMAKE_CHACHE_FILE="$PROJECT_DIR/.build/CMakeCache.txt"
@@ -50,16 +52,30 @@ if [ "$CLEAN" == "ON" ]; then
 fi
 
 
-for OPTION in "${OPTION_NAMES[@]}"; do
+for OPTION in "${CMAKE_OPTIONS[@]}"; do
   TARGET_VALUE=${!OPTION}
   if [ -f "$CMAKE_CHACHE_FILE" ]; then
       CURRENT_VALUE=$(grep "^${OPTION}:" "$CMAKE_CHACHE_FILE" | cut -d= -f2)
       # compare current value with target value
       if [ "$CURRENT_VALUE" != "$TARGET_VALUE" ]; then
+        echo "CMake option $OPTION changed from $CURRENT_VALUE to $TARGET_VALUE"
         CMAKE_CONFIG_CHANGED=1
       fi
   fi
   CMAKE_DEFINES+=" -D$OPTION=$TARGET_VALUE"
+done
+
+for OPTION in "${BUILD_OPTIONS[@]}"; do
+  TARGET_VALUE=${!OPTION}
+  if [ -f "$CMAKE_CHACHE_FILE" ]; then
+      CURRENT_VALUE=$(sed -n "s/.*-D${OPTION}=\([^[:space:]]*\).*/\1/p" "$CMAKE_CHACHE_FILE")
+      # compare current value with target value
+      if [ "$CURRENT_VALUE" != "$TARGET_VALUE" ]; then
+        echo "Build option $OPTION changed from $CURRENT_VALUE to $TARGET_VALUE"
+        CMAKE_CONFIG_CHANGED=1
+      fi
+  fi
+  BUILD_DEFINES+=" -D$OPTION=$TARGET_VALUE"
 done
 
 if [ $CMAKE_CONFIG_CHANGED -eq 1 ]; then
@@ -71,7 +87,8 @@ if [ ! -d "$PROJECT_DIR/.build" ]; then
   cmake -S . \
         -G Ninja \
         -B $PROJECT_DIR/.build \
-        -DCMAKE_C_FLAGS=""
+        -DCMAKE_C_FLAGS="${BUILD_DEFINES}" \
+        ${CMAKE_DEFINES}
 fi
 
 cmake --build $PROJECT_DIR/.build --parallel
